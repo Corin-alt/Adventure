@@ -1,91 +1,139 @@
 /**
  * @file threads_utils.c
- * @brief Implémentation des fonctions utiles aux threads
- * @author Dupont Corentin & Lacroix Owen
- * @date 2022-03-14
+ * @brief Fonctions utiles aux threads
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "threads_utils.h"
 #include "ncurses_utils.h"
-#include "ncurses.h"
 
-/**
- * @brief Permet de créer un thread avec une vérification
- * 
- * @param thread le thread
- * @param func la routine du thread
- * @param arg les arguments passés au thread
- */
+#define MAX_RETRIES 3
+#define RETRY_DELAY 1000 // 1ms
+
 void create_thread_check(pthread_t *thread, void *(*start_routine)(void *), void *arg) {
-    int state;
-    if ((state = pthread_create(thread, NULL, start_routine, arg)) != 0) {
+    if (!thread || !start_routine) return;
+
+    int ret, retries = 0;
+    while (retries < MAX_RETRIES) {
+        ret = pthread_create(thread, NULL, start_routine, arg);
+        if (ret == 0 || ret != EAGAIN) break;
+        usleep(RETRY_DELAY);
+        retries++;
+    }
+
+    if (ret != 0) {
         ncurses_stop();
-        fprintf(stderr, "An error occurred while creating the thread: error %d\n", state);
+        fprintf(stderr, "Création thread échouée: erreur %d\n", ret);
         exit(EXIT_FAILURE);
     }
 }
 
-
-/**
- * @brief Permet d'initialiser un mutex avec une vérification
- * 
- * @param mutex le mutex
- */
 void mutex_init_check(pthread_mutex_t *mutex) {
-    int state;
-    if ((state = pthread_mutex_init(mutex, NULL)) != 0) {
+    if (!mutex) return;
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+
+    int ret = pthread_mutex_init(mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+
+    if (ret != 0) {
         ncurses_stop();
-        fprintf(stderr, "An error occurred while trying to lock the mutex: error %d\n", state);
+        fprintf(stderr, "Init mutex échoué: erreur %d\n", ret);
         exit(EXIT_FAILURE);
     }
 }
 
-
-
-/**
- * @brief Permet de vérouiller un mutex avec une vérification
- * 
- * @param mutex le mutex
- */
 void mutex_lock_check(pthread_mutex_t *mutex) {
-    int state;
-    if ((state = pthread_mutex_lock(mutex)) != 0) {
+    if (!mutex) return;
+
+    int ret, retries = 0;
+    while (retries < MAX_RETRIES) {
+        ret = pthread_mutex_lock(mutex);
+        if (ret == 0 || ret != EAGAIN) break;
+        usleep(RETRY_DELAY);
+        retries++;
+    }
+
+    if (ret != 0) {
         ncurses_stop();
-        fprintf(stderr, "An error occurred while trying to lock the mutex: error %d\n", state);
+        fprintf(stderr, "Verrouillage mutex échoué: erreur %d\n", ret);
         exit(EXIT_FAILURE);
     }
 }
 
-/**
- * @brief Permet de dévérouiller un mutex avec une vérification
- * 
- * @param mutex le mutex
- */
 void mutex_unlock_check(pthread_mutex_t *mutex) {
-    int state;
-    if ((state = pthread_mutex_unlock(mutex)) != 0) {
+    if (!mutex) return;
+
+    int ret = pthread_mutex_unlock(mutex);
+    if (ret != 0) {
         ncurses_stop();
-        fprintf(stderr, "An error occurred while trying to unlock the mutex, error: %d\n", state);
+        fprintf(stderr, "Déverrouillage mutex échoué: erreur %d\n", ret);
         exit(EXIT_FAILURE);
     }
 }
 
-/**
- * @brief Permet de broadcaster une condition avec une vérification
- * 
- * @param mutex le mutex
- */
 void mutex_cond_broadcast_check(pthread_cond_t *cond) {
-    int state;
-    if ((state = pthread_cond_broadcast(cond)) != 0) {
+    if (!cond) return;
+
+    int ret = pthread_cond_broadcast(cond);
+    if (ret != 0) {
         ncurses_stop();
-        fprintf(stderr, "An error occurred while trying to unlock the mutex, error: %d\n", state);
+        fprintf(stderr, "Broadcast condition échoué: erreur %d\n", ret);
         exit(EXIT_FAILURE);
     }
 }
 
+void mutex_destroy_check(pthread_mutex_t *mutex) {
+    if (!mutex) return;
 
+    int ret = pthread_mutex_destroy(mutex);
+    if (ret != 0) {
+        ncurses_stop();
+        fprintf(stderr, "Destruction mutex échouée: erreur %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+}
 
+void thread_join_check(pthread_t thread, void **retval) {
+    int ret = pthread_join(thread, retval);
+    if (ret != 0) {
+        ncurses_stop();
+        fprintf(stderr, "Join thread échoué: erreur %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+}
 
+void thread_cancel_check(pthread_t thread) {
+    int ret = pthread_cancel(thread);
+    if (ret != 0) {
+        ncurses_stop();
+        fprintf(stderr, "Cancel thread échoué: erreur %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void mutex_trylock_check(pthread_mutex_t *mutex) {
+    if (!mutex) return;
+
+    int ret = pthread_mutex_trylock(mutex);
+    if (ret != 0 && ret != EBUSY) {
+        ncurses_stop();
+        fprintf(stderr, "Trylock mutex échoué: erreur %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void cond_wait_check(pthread_cond_t *cond, pthread_mutex_t *mutex) {
+    if (!cond || !mutex) return;
+
+    int ret = pthread_cond_wait(cond, mutex);
+    if (ret != 0) {
+        ncurses_stop();
+        fprintf(stderr, "Wait condition échoué: erreur %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+}
