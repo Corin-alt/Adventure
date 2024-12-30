@@ -94,47 +94,56 @@ void handler(int signum) {
  * @param map la map
  */
 void run_thread_map(map_t * map) {
-    int nb_monster = get_nb_monster_on_map(map);
-    nb_monster_thread = nb_monster_thread + nb_monster;
+   int nb_monster = get_nb_monster_on_map(map);
+   nb_monster_thread = nb_monster_thread + nb_monster;
 
-    if (nb_monster != 0) {
-        mutex_lock_check( & MUTEX_MONSTER_THREAD);
-        if (monster_threads == NULL) {
-            monster_threads = (pthread_t * ) malloc_check(sizeof(pthread_t) * nb_monster);
-        } else {
-            monster_threads = (pthread_t * ) realloc(monster_threads, sizeof(pthread_t) * nb_monster_thread);
-        }
+   if (nb_monster != 0) {
+       mutex_lock_check(&MUTEX_MONSTER_THREAD);
+       if (monster_threads == NULL) {
+           monster_threads = (pthread_t *)malloc_check(sizeof(pthread_t) * nb_monster);
+       } else {
+           monster_threads = (pthread_t *)realloc(monster_threads, sizeof(pthread_t) * nb_monster_thread);
+       }
 
-        int tmp_index = 0;
-        entity_t * all_monster = get_all_monster_on_map(map);
+       if (monster_threads == NULL) {
+           printf("[Log - ERROR] Échec d'allocation des threads monstres\n");
+           exit(EXIT_FAILURE);
+       }
 
-        for (int i = (nb_monster_thread - nb_monster); i < nb_monster_thread; i++) {
-            data_monster_routine_t * data = (data_monster_routine_t * ) malloc_check(sizeof(data_monster_routine_t));
-            data -> map = map;
-            data -> monster = & all_monster[tmp_index];
-            data -> id_thread = i + 1;
-            tmp_index++;
-            create_thread_check( & monster_threads[i], monster_routine, data);
-        }
+       int tmp_index = 0;
+       entity_t * all_monster = get_all_monster_on_map(map);
 
-        mutex_unlock_check( & MUTEX_MONSTER_THREAD);
-    }
+       for (int i = (nb_monster_thread - nb_monster); i < nb_monster_thread; i++) {
+           data_monster_routine_t * data = (data_monster_routine_t *)malloc_check(sizeof(data_monster_routine_t));
+           data->map = map;
+           data->monster = &all_monster[tmp_index];
+           data->id_thread = i + 1;
+           tmp_index++;
+           create_thread_check(&monster_threads[i], monster_routine, data);
+       }
+       mutex_unlock_check(&MUTEX_MONSTER_THREAD);
+   }
 
-    mutex_lock_check( & MUTEX_TREASURE_THREAD);
-    if (treasure_threads == NULL) {
-        treasure_threads = (pthread_t * ) malloc_check(sizeof(pthread_t) * 1);
-    } else {
-        treasure_threads = (pthread_t * ) realloc(treasure_threads, sizeof(pthread_t) * (nb_treasure_thread + 1));
-    }
-    nb_treasure_thread++;
+   mutex_lock_check(&MUTEX_TREASURE_THREAD);
+   if (treasure_threads == NULL) {
+       treasure_threads = (pthread_t *)malloc_check(sizeof(pthread_t) * 1);
+   } else {
+       treasure_threads = (pthread_t *)realloc(treasure_threads, sizeof(pthread_t) * (nb_treasure_thread + 1));
+   }
 
-    data_treasure_routine_t * data = (data_treasure_routine_t * ) malloc_check(sizeof(data_treasure_routine_t));
-    data -> map = map;
-    data -> id_thread = nb_treasure_thread;
+   if (treasure_threads == NULL) {
+       printf("[Log - ERROR] Échec d'allocation des threads trésors\n");
+       exit(EXIT_FAILURE);
+   }
 
-    create_thread_check( & monster_threads[nb_treasure_thread - 1], treasure_routine, data);
+   nb_treasure_thread++;
 
-    mutex_unlock_check( & MUTEX_TREASURE_THREAD);
+   data_treasure_routine_t * data = (data_treasure_routine_t *)malloc_check(sizeof(data_treasure_routine_t));
+   data->map = map;
+   data->id_thread = nb_treasure_thread;
+
+   create_thread_check(&treasure_threads[nb_treasure_thread - 1], treasure_routine, data);
+   mutex_unlock_check(&MUTEX_TREASURE_THREAD);
 }
 
 /**
