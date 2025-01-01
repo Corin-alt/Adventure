@@ -1,3 +1,10 @@
+/**
+ * @file client.c
+ * @brief Gestion du client du jeu
+ * @author Dupont Corentin & Lacroix Owen
+ * @date 2022-03-30
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
@@ -15,83 +22,88 @@
 #include "../utils/include.h"
 #include "../elements/hero.h"
 
-typedef struct {
-    int socket_fd;
-    volatile int *stop;
-} interface_data_t;
+/**
+ * @brief Routine de thread qui permet de rafraichier l'interface (map, hero etc...)
+ * 
+ * @param arg les arguments passés au thread
+ * @return void* 
+ */
 
-void *interface_routine(void *arg) {
+void * interface_routine(void * arg) {
+
     pthread_testcancel();
 
-    interface_data_t *data = (interface_data_t *)arg;
-    if (!data) return NULL;
-
-    int socket_client_fd = data->socket_fd;
+    int socket_client_fd = * (int * ) arg;
     int flag;
-    char *msg = NULL;
 
-    map_t *map = malloc_check(sizeof(map_t));
-    hero_t *hero = malloc_check(sizeof(hero_t));
-    interface_t *inter = NULL;
+    map_t * map = (map_t * ) malloc_check(sizeof(map_t));
+    hero_t * hero = (hero_t * ) malloc_check(sizeof(hero_t));
+    interface_t * inter = NULL;
 
-    if (!map || !hero) {
-        free(map);
-        free(hero);
-        free(data);
-        return NULL;
-    }
+    char * msg;
 
-    while (!*(data->stop)) {
-        read_int(socket_client_fd, &flag);
+    while (1) {
+        read_int(socket_client_fd, & flag);
 
-        if (inter && flag >= FLAG_SUCCESS_MESSAGE && flag <= FLAG_TAKE_ARTEFACT) {
-            read_string(socket_client_fd, &msg);
-
-            int color = (flag == FLAG_SUCCESS_MESSAGE) ? GREEN :
-                       (flag == FLAG_WARNING_MESSAGE) ? YELLOW : RED;
-
-            fenetre_printw_col(inter->win_infos, color, msg);
-            fenetre_refresh(inter->win_infos);
-            free(msg);
+        if (inter != NULL) {
+            if (flag == FLAG_SUCCESS_MESSAGE || flag == FLAG_TAKE_ARTEFACT) {
+                read_string(socket_client_fd, & msg);
+                fenetre_printw_col(inter -> win_infos, GREEN, msg);
+                fenetre_refresh(inter -> win_infos);
+            } else if (flag == FLAG_WARNING_MESSAGE) {
+                read_string(socket_client_fd, & msg);
+                fenetre_printw_col(inter -> win_infos, YELLOW, msg);
+                fenetre_refresh(inter -> win_infos);
+            } else if (flag == FLAG_ERROR_MESSAGE) {
+                read_string(socket_client_fd, & msg);
+                fenetre_printw_col(inter -> win_infos, RED, msg);
+                fenetre_refresh(inter -> win_infos);
+            }
         }
 
         lock_map(map);
         read_map(socket_client_fd, map);
         unlock_map(map);
+
         read_hero(socket_client_fd, hero);
 
-        if (!inter) {
+        if (inter == NULL) {
             inter = game_interface_creer(map, hero);
-            if (!inter) break;
-
-            print_hero_stat(hero, inter->win_hero);
-            fenetre_refresh(inter->win_hero);
+            print_hero_stat(hero, inter -> win_hero);
+            fenetre_refresh(inter -> win_hero);
         } else {
-            inter->map = map;
-            inter->hero = hero;
-            print_hero_stat(hero, inter->win_hero);
+            inter -> map = map;
+            inter -> hero = hero;
+            print_hero_stat(hero, inter -> win_hero);
             refresh_map_in_interface(inter, map);
-            fenetre_refresh(inter->win_hero);
-            fenetre_refresh(inter->win_infos);
+            fenetre_refresh(inter -> win_hero);
+            fenetre_refresh(inter -> win_infos);
         }
 
-        usleep(convert_theoric_move_speed_for_thread(hero->move_speed));
+        usleep(convert_theoric_move_speed_for_thread(hero -> move_speed));
+        //sleep(1);
     }
 
-    if (inter) game_interface_supprimer(&inter);
-    free(map);
-    free(hero);
-    free(data);
+    free(arg);
+
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char * argv[]) {
+    struct sockaddr_in adresse;
+    pthread_t * map_refresh_thread;
+    sigset_t sigs_new, sigs_old;
+    int sock_client_fd, ch, stop = 0;
+
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <server_address> <server_port>\n", argv[0]);
-        return EXIT_FAILURE;
+        fprintf(stderr, "Usage : ./client <server_address> <server_port>\n");
+        fprintf(stderr, "With :\n");
+        fprintf(stderr, "  server_address : server IPv4 address\n");
+        fprintf(stderr, "  server_port    : server port number\n");
+        exit(EXIT_FAILURE);
     }
 
-    // Init ncurses
+    // Initialisation de ncurses
     setlocale(LC_ALL, "en_US.UTF-8");
     ncurses_init();
     ncurses_initsouris();
@@ -100,65 +112,57 @@ int main(int argc, char *argv[]) {
     clear();
     refresh();
 
-    // Block SIGINT
-    sigset_t sigs_block, sigs_old;
-    sigemptyset(&sigs_block);
-    sigaddset(&sigs_block, SIGINT);
-    if (sigprocmask(SIG_BLOCK, &sigs_block, &sigs_old) == -1) {
-        perror("sigprocmask");
-        ncurses_stop();
-        return EXIT_FAILURE;
+    //désactivation du signale SIGINT
+    sigemptyset( & sigs_new);
+    sigaddset( & sigs_new, SIGINT);
+    if (sigprocmask(SIG_BLOCK, & sigs_new, & sigs_old) == -1) {
+        perror("Erreur lors du blocage des signaux ");
+        exit(EXIT_FAILURE);
     }
 
-    // Setup socket connection
-    int sock_client_fd = create_ipv4_tcp_socket();
-    struct sockaddr_in server_addr = {0};
-    init_address(&server_addr, argv[1], atoi(argv[2]));
-    connect_socket(sock_client_fd, &server_addr);
+    sock_client_fd = create_ipv4_tcp_socket(); //création de la socket
+    init_address( & adresse, argv[1], atoi(argv[2])); //initialisation de l'adrresse (remplissage de la structure)
+    connect_socket(sock_client_fd, & adresse); //connexion au serveur
 
-    // Setup interface thread
-    pthread_t interface_thread;
-    volatile int stop = 0;
-    interface_data_t *data = malloc_check(sizeof(interface_data_t));
-    if (!data) {
-        ncurses_stop();
-        close_socket(sock_client_fd);
-        return EXIT_FAILURE;
-    }
+    map_refresh_thread = (pthread_t * ) malloc_check(sizeof(pthread_t));
+    create_thread_check(map_refresh_thread, interface_routine, & sock_client_fd);
 
-    data->socket_fd = sock_client_fd;
-    data->stop = &stop;
-
-    create_thread_check(&interface_thread, interface_routine, data);
-
-    // Main input loop
-    int ch;
-    while (!stop) {
+    while (stop != 1) {
         ch = getch();
 
-        if (ch == 'q' || ch == 'Q') {
+        if ((ch == 'Q') || (ch == 'q')) {
             write_int(sock_client_fd, KEY_q);
             stop = 1;
+        } else if (ch == KEY_UP) {
+            write_int(sock_client_fd, KEY_UP);
+        } else if (ch == KEY_DOWN) {
+            write_int(sock_client_fd, KEY_DOWN);
+        } else if (ch == KEY_LEFT) {
+            write_int(sock_client_fd, KEY_LEFT);
+        } else if (ch == KEY_RIGHT) {
+            write_int(sock_client_fd, KEY_RIGHT);
+        } else if (ch == KEY_SPACE) {
+            write_int(sock_client_fd, KEY_SPACE);
         }
-        else if (ch == KEY_UP || ch == KEY_DOWN ||
-                 ch == KEY_LEFT || ch == KEY_RIGHT ||
-                 ch == KEY_SPACE) {
-            write_int(sock_client_fd, ch);
-        }
+
     }
 
-    // Cleanup
+    // Arrêt de ncurses
     ncurses_stop();
-    close_in_write(sock_client_fd);
-    pthread_cancel(interface_thread);
-    pthread_join(interface_thread, NULL);
 
-    // Restore signal mask
-    if (sigprocmask(SIG_SETMASK, &sigs_old, NULL) == -1) {
-        perror("sigprocmask restore");
-        return EXIT_FAILURE;
+    close_in_write(sock_client_fd); //fermeture de la socket
+    pthread_cancel( * map_refresh_thread);
+    if (pthread_join( * map_refresh_thread, NULL) == 0) {
+        printf("[Log - Client] - Le client s'est correctement arrêté.\n");
     }
 
-    printf("Client terminé.\n");
+    //réactivation du signale SIGINT
+    if (sigprocmask(SIG_SETMASK, & sigs_old, NULL) == -1) {
+        perror("Erreur lors du repositionnement ");
+        exit(EXIT_FAILURE);
+    }
+
+    free(map_refresh_thread);
+
     return EXIT_SUCCESS;
 }

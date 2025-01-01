@@ -1,40 +1,45 @@
-# Adventure game in C
+# Jeu d'aventure en C
 
-This application, which is an adventure game, is the joint project of the **advanced operating system** and **multi-threaded programming** subjects in the third year of the Computer Science bachelor's degree.
+Cette application qui est un jeu d'aventure est le projet commun à la matière **système d'exploitation avancée** et **programmationmulti-threadée** de la troisième année de licence Informatique.
 
-This application lets you create your own game map.
+Cette application vous permet de créer vos propre carte de jeu.
 
-#### __Specifics__
+#### __Spécificités__
 
-- Multi-player network
-- Multi-threaded
+- Multi-Joueurs en réseaux
+- Multi-Threadé
 - NCurses
 
-#### __Game rules__
+#### __Règles du jeu__
 
 #### __Compilation__
-1- Open a terminal from ``/projet601-604``.
+1- Ouvrez un terminal depuis ```/projet601-604```
 
-2- Clean the :
+2- Nettoyez le dossier :
 
     - make clean
     
-3- Then compile :
+3- Puis compilez :
 
     - make
 
-#### __User__
+#### __Utilisation__
 
-- ##### __Editor__
+- ##### __Éditeur__
 
-The editor lets you create game maps for adventure. It only takes binary files.
+L'éditeur permet de créer des carte de jeu, pour l'aventure. Celui-ci ne prend que des fichiers binaire.
 
-To access the editor, open a terminal from ```/projet601-604/editor`` then :
+Pour accéder à l'éditeur, ouvrez un terminal depuis ```/projet601-604/editor``` puis :
 
-    - ./editor <map.bin>
-    - map.bin: the map file, if it doesn't exist then the file is created, otherwise the file is loaded.
+    - ./editeur <carte.bin>
 
-Maps are saved in ```/projet601-604/carts```
+- ``<carte.bin>`` : le fichier de la carte, s'il n'existe pas alors le fichierest est crée sinon le fichier est chargé
+
+Les cartes sont sauvegardées dans  ```/projet601-604/carts```
     
+- ##### __Jeu__
 
+#### Auteurs
 
+- Dupont Corentin
+- Lacroix Owen
